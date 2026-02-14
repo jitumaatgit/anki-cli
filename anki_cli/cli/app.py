@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-import platform
 from pathlib import Path
-from typing import Any
 
 import click
+from click.core import ParameterSource
 
 from anki_cli import __version__
 from anki_cli.backends.detect import DetectionError, detect_backend
+from anki_cli.cli.dispatcher import get_command, list_commands
+from anki_cli.cli.formatter import formatter_from_ctx
+from anki_cli.cli.params import preprocess_argv
+from anki_cli.config_runtime import ConfigError, resolve_runtime_config
 
 
 def _print_version(ctx: click.Context, param: click.Option, value: bool) -> None:
@@ -17,7 +20,28 @@ def _print_version(ctx: click.Context, param: click.Option, value: bool) -> None
     raise click.exceptions.Exit()
 
 
-@click.group(context_settings={"help_option_names": ["-h", "--help"]})
+def _is_set_on_cli(ctx: click.Context, param_name: str) -> bool:
+    return ctx.get_parameter_source(param_name) is ParameterSource.COMMANDLINE
+
+
+class NamespaceGroup(click.Group):
+    """Click group with dynamic command discovery and key=value preprocessing."""
+
+    def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
+        transformed = preprocess_argv(args)
+        return super().parse_args(ctx, transformed)
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        return list_commands()
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        return get_command(cmd_name)
+
+
+@click.group(
+    cls=NamespaceGroup,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
 @click.option(
     "--format",
     "output_format",
@@ -60,19 +84,11 @@ def main(
     copy: bool,
 ) -> None:
     ctx.ensure_object(dict)
-
-    try:
-        detection = detect_backend(forced_backend=backend, col_override=collection_path)
-    except DetectionError as exc:
-        click.echo(str(exc), err=True)
-        raise click.exceptions.Exit(exc.exit_code) from exc
-
     ctx.obj.update(
         {
             "format": output_format.lower(),
-            "collection_path": detection.collection_path,
-            "backend": detection.backend,
-            "backend_reason": detection.reason,
+            "collection_path": collection_path,
+            "backend": "none",
             "quiet": quiet,
             "verbose": verbose,
             "no_color": no_color,
@@ -81,23 +97,56 @@ def main(
         }
     )
 
+    try:
+        runtime = resolve_runtime_config(
+            cli_backend=backend,
+            cli_backend_set=_is_set_on_cli(ctx, "backend"),
+            cli_output_format=output_format,
+            cli_output_set=_is_set_on_cli(ctx, "output_format"),
+            cli_no_color=no_color,
+            cli_no_color_set=_is_set_on_cli(ctx, "no_color"),
+            cli_collection_path=collection_path,
+            cli_collection_set=_is_set_on_cli(ctx, "collection_path"),
+        )
+    except ConfigError as exc:
+        formatter = formatter_from_ctx(ctx)
+        formatter.emit_error(
+            command="bootstrap",
+            code="INVALID_CONFIG",
+            message=str(exc),
+        )
+        raise click.exceptions.Exit(2) from exc
 
-@main.command("version")
-@click.pass_context
-def version_cmd(ctx: click.Context) -> None:
-    obj: dict[str, Any] = ctx.obj or {}
-    backend = obj.get("backend", "auto")
-    col = obj.get("collection_path")
-    click.echo(f"anki-cli {__version__}")
-    click.echo(f"python {platform.python_version()}")
-    click.echo(f"backend {backend}")
-    click.echo(f"collection {col if col else '(none)'}")
+    ctx.obj.update(
+        {
+            "format": runtime.output_format,
+            "no_color": runtime.no_color,
+            "requested_backend": runtime.backend,
+            "config_path": runtime.config_path,
+            "app_config": runtime.app,
+            "collection_override": runtime.collection_override,
+        }
+    )
 
+    try:
+        detection = detect_backend(
+            forced_backend=runtime.backend,
+            col_override=runtime.collection_override,
+        )
+    except DetectionError as exc:
+        formatter = formatter_from_ctx(ctx)
+        formatter.emit_error(
+            command="bootstrap",
+            code="BACKEND_UNAVAILABLE",
+            message=str(exc),
+            details={"forced_backend": runtime.backend},
+        )
+        raise click.exceptions.Exit(exc.exit_code) from exc
 
-@main.command("status")
-@click.pass_context
-def status_cmd(ctx: click.Context) -> None:
-    obj: dict[str, Any] = ctx.obj or {}
-    click.echo(f"backend: {obj.get('backend', 'unknown')}")
-    click.echo(f"collection: {obj.get('collection_path') or '(none)'}")
-    click.echo("status: foundation in progress")
+    ctx.obj.update(
+        {
+            "collection_path": detection.collection_path,
+            "backend": detection.backend,
+            "backend_reason": detection.reason,
+        }
+    )

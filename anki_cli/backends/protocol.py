@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, TypeAlias, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-JSONPrimitive: TypeAlias = str | int | float | bool | None
-JSONValue: TypeAlias = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
+type JSONPrimitive = str | int | float | bool | None
+type JSONValue = JSONPrimitive | dict[str, "JSONValue"] | list["JSONValue"]
+
 
 @runtime_checkable
 class AnkiBackend(Protocol):
-    """Backend contract shared by AnkiConnect, direst and standalone modes"""
+    """Backend contract shared by ankiconnect, direct, and standalone modes."""
 
     name: str
     collection_path: Path | None
@@ -31,7 +32,7 @@ class AnkiBackend(Protocol):
         tags: list[str] | None = None,
     ) -> int: ...
     def add_notes(self, notes: list[dict[str, JSONValue]]) -> list[int | None]: ...
-    def update_notes(
+    def update_note(
         self,
         note_id: int,
         fields: dict[str, str] | None = None,
@@ -53,5 +54,5 @@ class AnkiBackend(Protocol):
     def add_tags(self, note_ids: list[int], tags: list[str]) -> dict[str, JSONValue]: ...
     def remove_tags(self, note_ids: list[int], tags: list[str]) -> dict[str, JSONValue]: ...
 
-    # Review Summary
+    # Review summary
     def get_due_counts(self, deck: str | None = None) -> dict[str, int]: ...

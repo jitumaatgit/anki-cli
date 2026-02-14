@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+import csv
+import io
+import json
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+import click
+from pydantic import BaseModel
+from rich.console import Console
+from rich.table import Table
+
+from anki_cli.models.output import (
+    ErrorInfo,
+    ErrorResponse,
+    JSONValue,
+    Meta,
+    SuccessResponse,
+)
+
+
+class OutputFormatter:
+    def __init__(
+        self,
+        *,
+        output_format: str,
+        backend: str,
+        collection_path: str | None,
+        no_color: bool,
+        copy_output: bool,
+    ) -> None:
+        self.output_format = output_format.lower()
+        self.backend = backend
+        self.collection_path = collection_path
+        self.no_color = no_color
+        self.copy_output = copy_output
+
+    def emit_success(self, *, command: str, data: JSONValue | BaseModel) -> None:
+        normalized = self._normalize_data(data)
+
+        response = SuccessResponse(
+            data=normalized,
+            meta=self._build_meta(command),
+        )
+
+        if self.output_format == "json":
+            text = json.dumps(response.model_dump(mode="json"), ensure_ascii=False, indent=2)
+            click.echo(text)
+            self._copy_if_requested(text)
+            return
+
+        rendered = self._render_data(normalized)
+        click.echo(rendered)
+        self._copy_if_requested(rendered)
+
+    def emit_error(
+        self,
+        *,
+        command: str,
+        code: str,
+        message: str,
+        details: dict[str, JSONValue] | None = None,
+    ) -> None:
+        payload = ErrorResponse(
+            error=ErrorInfo(
+                code=code,
+                message=message,
+                details=details or {},
+            ),
+            meta=self._build_meta(command),
+        )
+
+        if self.output_format == "json":
+            text = json.dumps(payload.model_dump(mode="json"), ensure_ascii=False, indent=2)
+            click.echo(text, err=True)
+            self._copy_if_requested(text)
+            return
+
+        click.echo(f"{code}: {message}", err=True)
+        if payload.error.details:
+            for key, value in payload.error.details.items():
+                click.echo(f"- {key}: {self._stringify(value)}", err=True)
+
+    def _build_meta(self, command: str) -> Meta:
+        timestamp = datetime.now(tz=UTC).isoformat(timespec="seconds").replace(
+            "+00:00",
+            "Z",
+        )
+        return Meta(
+            command=command,
+            backend=self.backend,
+            collection=self.collection_path,
+            timestamp=timestamp,
+        )
+
+    def _normalize_data(self, data: JSONValue | BaseModel) -> JSONValue:
+        if isinstance(data, BaseModel):
+            dumped = data.model_dump(mode="json")
+            return dumped
+        return data
+
+    def _render_data(self, data: JSONValue) -> str:
+        if self.output_format == "table":
+            return self._render_table(data)
+        if self.output_format == "md":
+            return self._render_md(data)
+        if self.output_format == "csv":
+            return self._render_csv(data)
+        if self.output_format == "plain":
+            return self._render_plain(data)
+        return self._render_plain(data)
+
+    def _render_table(self, data: JSONValue) -> str:
+        rows, columns = self._coerce_rows(data)
+        if not rows:
+            return "(no data)"
+
+        table = Table(show_lines=False)
+        for column in columns:
+            table.add_column(column)
+
+        for row in rows:
+            table.add_row(*[self._stringify(row.get(column)) for column in columns])
+
+        console = Console(record=True, no_color=self.no_color, force_terminal=False)
+        console.print(table)
+        return console.export_text().rstrip()
+
+    def _render_md(self, data: JSONValue) -> str:
+        rows, columns = self._coerce_rows(data)
+        if not rows:
+            return "(no data)"
+
+        header = "| " + " | ".join(columns) + " |"
+        divider = "| " + " | ".join(["---"] * len(columns)) + " |"
+        lines = [header, divider]
+
+        for row in rows:
+            values = [self._escape_md(self._stringify(row.get(column))) for column in columns]
+            lines.append("| " + " | ".join(values) + " |")
+
+        return "\n".join(lines)
+
+    def _render_csv(self, data: JSONValue) -> str:
+        rows, columns = self._coerce_rows(data)
+        if not rows:
+            return ""
+
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=columns)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({column: self._stringify(row.get(column)) for column in columns})
+        return buffer.getvalue().rstrip("\n")
+
+    def _render_plain(self, data: JSONValue) -> str:
+        rows, columns = self._coerce_rows(data)
+        if not rows:
+            return ""
+
+        if len(rows) == 1 and len(columns) > 1:
+            single = rows[0]
+            return "\n".join(
+                f"{column}={self._stringify(single.get(column))}" for column in columns
+            )
+
+        lines: list[str] = []
+        for row in rows:
+            parts = [f"{column}={self._stringify(row.get(column))}" for column in columns]
+            lines.append(" ".join(parts))
+        return "\n".join(lines)
+
+    def _coerce_rows(self, data: JSONValue) -> tuple[list[dict[str, JSONValue]], list[str]]:
+        if isinstance(data, dict):
+            row = {str(key): value for key, value in data.items()}
+            return [row], list(row.keys())
+
+        if isinstance(data, list):
+            if not data:
+                return [], []
+
+            if all(isinstance(item, dict) for item in data):
+                rows = [{str(k): v for k, v in item.items()} for item in data]
+                columns = self._ordered_union(rows)
+                return rows, columns
+
+            rows = [{"value": item} for item in data]
+            return rows, ["value"]
+
+        return [{"value": data}], ["value"]
+
+    def _ordered_union(self, rows: list[dict[str, JSONValue]]) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for row in rows:
+            for key in row:
+                if key in seen:
+                    continue
+                seen.add(key)
+                ordered.append(key)
+        return ordered
+
+    def _stringify(self, value: JSONValue | None) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, (str, int, float, bool)):
+            return str(value)
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+    def _escape_md(self, value: str) -> str:
+        return value.replace("|", "\\|").replace("\n", "<br>")
+
+    def _copy_if_requested(self, text: str) -> None:
+        if not self.copy_output:
+            return
+
+        try:
+            import pyperclip  # type: ignore[import-not-found]
+        except ModuleNotFoundError:
+            click.echo(
+                "warning: --copy requested but optional clipboard dependency is not installed",
+                err=True,
+            )
+            return
+
+        try:
+            pyperclip.copy(text)
+        except Exception:
+            click.echo("warning: clipboard is unavailable on this system", err=True)
+
+
+def formatter_from_ctx(ctx: click.Context) -> OutputFormatter:
+    obj: dict[str, Any] = ctx.obj or {}
+
+    collection_path: str | None
+    raw_collection = obj.get("collection_path")
+    if isinstance(raw_collection, Path):
+        collection_path = str(raw_collection)
+    elif raw_collection is None:
+        collection_path = None
+    else:
+        collection_path = str(raw_collection)
+
+    return OutputFormatter(
+        output_format=str(obj.get("format", "table")),
+        backend=str(obj.get("backend", "none")),
+        collection_path=collection_path,
+        no_color=bool(obj.get("no_color", False)),
+        copy_output=bool(obj.get("copy", False)),
+    )
