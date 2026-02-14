@@ -43,4 +43,4 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "UP", "SIM", "C4", "RUF"]
 
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.13"

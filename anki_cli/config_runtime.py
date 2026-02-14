@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tomllib
 from collections.abc import Mapping
@@ -119,6 +120,37 @@ def load_app_config(config_path: Path | None = None) -> LoadedConfig:
     return LoadedConfig(app=app, config_path=path, file_data=parsed)
 
 
+def set_config_value(
+    *,
+    key: str,
+    raw_value: str,
+    config_path: Path | None = None,
+) -> tuple[LoadedConfig, Any, Any]:
+    loaded = load_app_config(config_path=config_path)
+    merged = loaded.app.model_dump(mode="python")
+
+    parts = _normalize_key(key)
+    old_value = _get_nested(merged, parts)
+    new_value = _coerce_raw_value(raw_value, old_value)
+
+    _set_nested(merged, parts, new_value)
+
+    try:
+        validated = AppConfig.model_validate(merged)
+    except ValidationError as exc:
+        raise ConfigError(f"Invalid value for '{key}': {exc}") from exc
+
+    _write_config_file(loaded.config_path, validated)
+    final_value = _get_nested(validated.model_dump(mode="python"), parts)
+
+    refreshed = LoadedConfig(
+        app=validated,
+        config_path=loaded.config_path,
+        file_data=validated.model_dump(mode="python"),
+    )
+    return refreshed, old_value, final_value
+
+
 def _resolve_backend(
     *,
     cli_backend: str,
@@ -169,7 +201,7 @@ def _resolve_color(
     color = file_color
 
     if env_color is not None:
-        color = _parse_bool_env("ANKI_CLI_COLOR", env_color)
+        color = _parse_bool_string("ANKI_CLI_COLOR", env_color)
 
     if cli_no_color_set and cli_no_color:
         color = False
@@ -200,25 +232,19 @@ def _resolve_collection_override(
     return None
 
 
-def _parse_bool_env(name: str, value: str) -> bool:
+def _parse_bool_string(name: str, value: str) -> bool:
     normalized = value.strip().lower()
     if normalized in _TRUE_VALUES:
         return True
     if normalized in _FALSE_VALUES:
         return False
-    raise ConfigError(
-        f"Invalid boolean for {name}: '{value}'. Expected one of "
-        f"{sorted(_TRUE_VALUES | _FALSE_VALUES)}."
-    )
+    expected = sorted(_TRUE_VALUES | _FALSE_VALUES)
+    raise ConfigError(f"Invalid boolean for {name}: '{value}'. Expected one of {expected}.")
 
 
 def _deep_merge(base: dict[str, Any], updates: Mapping[str, Any]) -> None:
     for key, value in updates.items():
-        if (
-            key in base
-            and isinstance(base[key], dict)
-            and isinstance(value, Mapping)
-        ):
+        if key in base and isinstance(base[key], dict) and isinstance(value, Mapping):
             _deep_merge(base[key], value)
         else:
             base[key] = value
@@ -231,3 +257,118 @@ def _has_nested_key(data: Mapping[str, Any], *keys: str) -> bool:
             return False
         current = current[key]
     return True
+
+
+def _normalize_key(key: str) -> list[str]:
+    normalized = key.strip()
+    if not normalized:
+        raise ConfigError("Config key cannot be empty.")
+
+    parts = [part.strip() for part in normalized.split(".")]
+    if any(not part for part in parts):
+        raise ConfigError(f"Invalid config key '{key}'. Use dotted keys like display.color.")
+    return parts
+
+
+def _get_nested(data: dict[str, Any], parts: list[str]) -> Any:
+    current: Any = data
+    traversed: list[str] = []
+
+    for part in parts:
+        traversed.append(part)
+        if not isinstance(current, dict):
+            raise ConfigError(f"'{'.'.join(traversed[:-1])}' is not a config table.")
+        if part not in current:
+            raise ConfigError(f"Unknown config key '{'.'.join(parts)}'.")
+        current = current[part]
+
+    return current
+
+
+def _set_nested(data: dict[str, Any], parts: list[str], value: Any) -> None:
+    current: dict[str, Any] = data
+    for part in parts[:-1]:
+        child = current.get(part)
+        if not isinstance(child, dict):
+            raise ConfigError(f"'{part}' is not a config table.")
+        current = child
+    current[parts[-1]] = value
+
+
+def _coerce_raw_value(raw_value: str, old_value: Any) -> Any:
+    if isinstance(old_value, bool):
+        return _parse_bool_string("value", raw_value)
+
+    if isinstance(old_value, int) and not isinstance(old_value, bool):
+        try:
+            return int(raw_value)
+        except ValueError as exc:
+            raise ConfigError(f"Expected integer, got '{raw_value}'.") from exc
+
+    if isinstance(old_value, float):
+        try:
+            return float(raw_value)
+        except ValueError as exc:
+            raise ConfigError(f"Expected float, got '{raw_value}'.") from exc
+
+    if isinstance(old_value, str):
+        return raw_value
+
+    if isinstance(old_value, list):
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError as exc:
+            raise ConfigError("Expected JSON list for this key.") from exc
+        if not isinstance(parsed, list):
+            raise ConfigError("Expected JSON list for this key.")
+        return parsed
+
+    if isinstance(old_value, dict):
+        try:
+            parsed = json.loads(raw_value)
+        except json.JSONDecodeError as exc:
+            raise ConfigError("Expected JSON object for this key.") from exc
+        if not isinstance(parsed, dict):
+            raise ConfigError("Expected JSON object for this key.")
+        return parsed
+
+    raise ConfigError(f"Unsupported value type for config update: {type(old_value).__name__}.")
+
+
+def _write_config_file(path: Path, app_config: AppConfig) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    content = _serialize_config_toml(app_config)
+
+    temp_path = path.with_suffix(path.suffix + ".tmp")
+    temp_path.write_text(content, encoding="utf-8")
+    os.replace(temp_path, path)
+
+
+def _serialize_config_toml(app_config: AppConfig) -> str:
+    data = app_config.model_dump(mode="python")
+
+    sections = ["collection", "backend", "display", "backup", "review"]
+    lines: list[str] = []
+
+    for idx, section in enumerate(sections):
+        section_data = data.get(section, {})
+        lines.append(f"[{section}]")
+        for key, value in section_data.items():
+            lines.append(f"{key} = {_toml_scalar(value)}")
+        if idx != len(sections) - 1:
+            lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def _toml_scalar(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float):
+        return str(value)
+    if isinstance(value, str):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    raise ConfigError(f"Unsupported TOML scalar type: {type(value).__name__}.")

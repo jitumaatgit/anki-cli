@@ -7,6 +7,7 @@ import click
 
 from anki_cli.cli.dispatcher import register_command
 from anki_cli.cli.formatter import formatter_from_ctx
+from anki_cli.config_runtime import ConfigError, set_config_value
 from anki_cli.models.config import AppConfig
 
 
@@ -51,6 +52,7 @@ def config_path_cmd(ctx: click.Context) -> None:
     config_path = obj.get("config_path") or Path("~/.config/anki-cli/config.toml").expanduser()
     backup_path = Path("~/.local/share/anki-cli/backups").expanduser()
     standalone_path = Path("~/.local/share/anki-cli/collection.db").expanduser()
+    anki_profiles = Path("~/.local/share/Anki2").expanduser()
 
     formatter = formatter_from_ctx(ctx)
     formatter.emit_success(
@@ -60,9 +62,48 @@ def config_path_cmd(ctx: click.Context) -> None:
             "config": str(config_path),
             "backups": str(backup_path),
             "standalone_default": str(standalone_path),
+            "anki_profiles": str(anki_profiles),
+        },
+    )
+
+
+@click.command("config:set")
+@click.option("--key", required=True, help="Dotted key path, e.g. display.color")
+@click.option("--value", required=True, help="New value")
+@click.pass_context
+def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
+    obj: dict[str, Any] = ctx.obj or {}
+    formatter = formatter_from_ctx(ctx)
+
+    raw_path = obj.get("config_path")
+    config_path = Path(raw_path) if isinstance(raw_path, (str, Path)) else None
+
+    try:
+        loaded, old_value, new_value = set_config_value(
+            key=key,
+            raw_value=value,
+            config_path=config_path,
+        )
+    except ConfigError as exc:
+        formatter.emit_error(
+            command="config:set",
+            code="INVALID_CONFIG",
+            message=str(exc),
+            details={"key": key, "value": value},
+        )
+        raise click.exceptions.Exit(2) from exc
+
+    formatter.emit_success(
+        command="config:set",
+        data={
+            "config_path": str(loaded.config_path),
+            "key": key,
+            "old_value": old_value,
+            "new_value": new_value,
         },
     )
 
 
 register_command("config", config_cmd)
 register_command("config:path", config_path_cmd)
+register_command("config:set", config_set_cmd)
