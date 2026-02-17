@@ -636,7 +636,34 @@ class AnkiConnectBackend(AnkiBackend):
         ids = self._normalize_ids(card_ids)
         if not ids:
             return {"updated": 0, "card_ids": []}
-        self._invoke("setFlag", cards=ids, flag=flag)
+        # AnkiConnect does not reliably expose a "setFlag" action across versions.
+        # The documented/supported way is to set the card "flags" field.
+        failures: list[dict[str, JSONValue]] = []
+        for cid in ids:
+            result = self._invoke(
+                "setSpecificValueOfCard",
+                card=cid,
+                keys=["flags"],
+                newValues=[flag],
+                warning_check=True,
+            )
+            if not isinstance(result, list) or not result:
+                raise AnkiConnectProtocolError(
+                    "setSpecificValueOfCard must return a non-empty list."
+                )
+
+            first = result[0]
+            if first is True:
+                continue
+
+            failures.append({"card_id": int(cid), "result": cast(JSONValue, first)})
+
+        if failures:
+            raise AnkiConnectAPIError(
+                "setSpecificValueOfCard",
+                f"Failed to set flags for {len(failures)} card(s).",
+            )
+
         return {"updated": len(ids), "card_ids": ids, "flag": flag}
 
     def bury_cards(self, card_ids: list[int]) -> dict[str, JSONValue]:

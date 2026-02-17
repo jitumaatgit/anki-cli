@@ -4,7 +4,7 @@ import json
 import shlex
 import sqlite3
 import time
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from hashlib import sha1
@@ -777,6 +777,217 @@ class AnkiDirectReadStore:
             "review": review_count,
             "total": new_count + learn_count + review_count,
         }
+
+    def get_next_due_card(self, deck: str | None = None) -> dict[str, JSONValue]:
+        now_sec = int(time.time())
+        today_days = self._today_due_index(now_sec)
+
+        with self._connect() as conn:
+            did_filter, params = self._deck_filter(conn, deck)
+
+            # 1) learning/relearning due (epoch seconds)
+            row = conn.execute(
+                f"""
+                SELECT id, due
+                FROM cards
+                WHERE queue IN (1, 3) AND due <= ? {did_filter}
+                ORDER BY due ASC, id ASC
+                LIMIT 1
+                """,
+                (now_sec, *params),
+            ).fetchone()
+            if row is not None:
+                return {"card_id": int(row["id"]), "kind": "learn_due"}
+
+            # 2) review due (day index)
+            row = conn.execute(
+                f"""
+                SELECT id, due
+                FROM cards
+                WHERE queue = 2 AND due <= ? {did_filter}
+                ORDER BY due ASC, id ASC
+                LIMIT 1
+                """,
+                (today_days, *params),
+            ).fetchone()
+            if row is not None:
+                return {"card_id": int(row["id"]), "kind": "review_due"}
+
+            # 3) new (position)
+            row = conn.execute(
+                f"""
+                SELECT id, due
+                FROM cards
+                WHERE queue = 0 {did_filter}
+                ORDER BY due ASC, id ASC
+                LIMIT 1
+                """,
+                params,
+            ).fetchone()
+            if row is not None:
+                return {"card_id": int(row["id"]), "kind": "new"}
+
+        return {"card_id": None, "kind": "none"}
+
+
+    def snapshot_card_state(self, card_id: int) -> dict[str, JSONValue]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    id, did, ord, type, queue, due, ivl, factor, reps, lapses, left, flags, data
+                FROM cards
+                WHERE id = ?
+                """,
+                (card_id,),
+            ).fetchone()
+
+        if row is None:
+            raise LookupError(f"Card not found: {card_id}")
+
+        return {
+            "id": int(row["id"]),
+            "did": int(row["did"]),
+            "ord": int(row["ord"]),
+            "type": int(row["type"]),
+            "queue": int(row["queue"]),
+            "due": int(row["due"]),
+            "ivl": int(row["ivl"]),
+            "factor": int(row["factor"]),
+            "reps": int(row["reps"]),
+            "lapses": int(row["lapses"]),
+            "left": int(row["left"]),
+            "flags": int(row["flags"]),
+            "data": str(row["data"] or ""),
+        }
+
+
+    def restore_card_state(self, snapshot: Mapping[str, Any]) -> dict[str, JSONValue]:
+        card_id = snapshot.get("id")
+        if not isinstance(card_id, int):
+            raise ValueError("snapshot.id must be an int")
+
+        now_sec = int(time.time())
+        with self._connect_write() as conn:
+            updated = conn.execute(
+                """
+                UPDATE cards
+                SET
+                    did = ?,
+                    ord = ?,
+                    type = ?,
+                    queue = ?,
+                    due = ?,
+                    ivl = ?,
+                    factor = ?,
+                    reps = ?,
+                    lapses = ?,
+                    left = ?,
+                    flags = ?,
+                    data = ?,
+                    mod = ?,
+                    usn = -1
+                WHERE id = ?
+                """,
+                (
+                    int(snapshot.get("did") or 0),
+                    int(snapshot.get("ord") or 0),
+                    int(snapshot.get("type") or 0),
+                    int(snapshot.get("queue") or 0),
+                    int(snapshot.get("due") or 0),
+                    int(snapshot.get("ivl") or 0),
+                    int(snapshot.get("factor") or 0),
+                    int(snapshot.get("reps") or 0),
+                    int(snapshot.get("lapses") or 0),
+                    int(snapshot.get("left") or 0),
+                    int(snapshot.get("flags") or 0),
+                    str(snapshot.get("data") or ""),
+                    now_sec,
+                    card_id,
+                ),
+            ).rowcount
+
+            # Manual revlog entry; we never delete revlog.
+            revlog_id = self._allocate_epoch_ms_id(conn, "revlog")
+            conn.execute(
+                """
+                INSERT INTO revlog (id, cid, usn, ease, ivl, lastIvl, factor, time, type)
+                VALUES (?, ?, -1, 0, 0, 0, 0, 0, 4)
+                """,
+                (revlog_id, card_id),
+            )
+
+        return {"card_id": card_id, "restored": int(updated) > 0, "revlog_id": revlog_id}
+
+
+    def preview_ratings(self, card_id: int) -> list[dict[str, JSONValue]]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT
+                    id, nid, did, ord, mod, usn, type, queue, due, ivl, factor, reps,
+                    lapses, left, odue, odid, flags, data
+                FROM cards
+                WHERE id = ?
+                """,
+                (card_id,),
+            ).fetchone()
+            if row is None:
+                raise LookupError(f"Card not found: {card_id}")
+
+            col_row = conn.execute("SELECT crt FROM col LIMIT 1").fetchone()
+            col_crt_sec = int(col_row["crt"]) if col_row is not None else int(time.time())
+
+            scheduler, _dr, learn_count, relearn_count = self._build_scheduler(
+                conn, int(row["did"])
+            )
+
+        review_dt = datetime.now(UTC)
+        out: list[dict[str, JSONValue]] = []
+
+        for ease in (1, 2, 3, 4):
+            fsrs_card = self._card_row_to_fsrs(row, col_crt_sec=col_crt_sec, now_dt=review_dt)
+            next_card, _review_log = scheduler.review_card(
+                fsrs_card,
+                Rating(ease),
+                review_datetime=review_dt,
+            )
+
+            (
+                new_type,
+                new_queue,
+                new_due,
+                new_ivl,
+                new_left,
+                next_due_epoch,
+            ) = self._map_fsrs_result_to_anki(
+                current_row=row,
+                next_card=next_card,
+                col_crt_sec=col_crt_sec,
+                learn_step_count=learn_count,
+                relearn_step_count=relearn_count,
+            )
+
+            out.append(
+                {
+                    "ease": ease,
+                    "type": new_type,
+                    "queue": new_queue,
+                    "due": new_due,
+                    "interval": new_ivl,
+                    "left": new_left,
+                    "next_due_epoch_secs": next_due_epoch,
+                    "due_info": self._decode_due(
+                        card_type=new_type,
+                        queue=new_queue,
+                        due_raw=new_due,
+                        col_crt_sec=col_crt_sec,
+                    ),
+                    "state": str(next_card.state),
+                }
+            )
+
+        return out
 
     def move_cards(self, *, card_ids: list[int], deck: str) -> dict[str, JSONValue]:
         ids = sorted({int(cid) for cid in card_ids if int(cid) > 0})
