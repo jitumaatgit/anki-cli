@@ -68,22 +68,31 @@ def decks_cmd(ctx: click.Context) -> None:
             decks = backend.get_decks()
             items: list[dict[str, JSONValue]] = []
             for deck in decks:
-                deck_name = str(deck.get("name", ""))
+                deck_name = str(deck.get("name", "")).replace("\x1f", "::")
                 due = backend.get_due_counts(deck=deck_name)
                 parts = [part for part in deck_name.split("::") if part]
                 level = max(0, len(parts) - 1)
                 leaf = parts[-1] if parts else deck_name
 
-                item: dict[str, JSONValue] = {
-                    **deck,
-                    "new": due.get("new", 0),
-                    "learn": due.get("learn", 0),
-                    "review": due.get("review", 0),
-                    "total_due": due.get("total", 0),
-                    "level": level,
-                }
                 if table_mode:
-                    item["name"] = f"{'  ' * level}{leaf}"
+                    display_name = f"{'  ' * level}{leaf}"
+                    item: dict[str, JSONValue] = {
+                        "name": display_name,
+                        "new": due.get("new", 0),
+                        "learn": due.get("learn", 0),
+                        "review": due.get("review", 0),
+                        "total": due.get("total", 0),
+                    }
+                else:
+                    item = {
+                        **deck,
+                        "name": deck_name,
+                        "new": due.get("new", 0),
+                        "learn": due.get("learn", 0),
+                        "review": due.get("review", 0),
+                        "total_due": due.get("total", 0),
+                        "level": level,
+                    }
                 items.append(item)
     except (BackendNotImplementedError, BackendFactoryError, NotImplementedError) as exc:
         _emit_backend_error(ctx=ctx, command="decks", obj=obj, error=exc, exit_code=7)

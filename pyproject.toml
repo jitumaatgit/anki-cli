@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-tui = ["textual"]
+tui = ["textual", "prompt-toolkit"]
 clipboard = ["pyperclip"]
 
 [dependency-groups]

@@ -41,6 +41,7 @@ class NamespaceGroup(click.Group):
 @click.group(
     cls=NamespaceGroup,
     context_settings={"help_option_names": ["-h", "--help"]},
+    invoke_without_command=True,
 )
 @click.option(
     "--format",
@@ -150,3 +151,10 @@ def main(
             "backend_reason": detection.reason,
         }
     )
+
+    if ctx.invoked_subcommand is None:
+        try:
+            from anki_cli.tui.repl import run_repl
+            run_repl(ctx.obj)
+        except ImportError:
+            click.echo(ctx.get_help())

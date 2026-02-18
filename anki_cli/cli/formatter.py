@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import click
 from pydantic import BaseModel
+from rich.box import SIMPLE_HEAD
 from rich.console import Console
 from rich.table import Table
 
@@ -117,14 +118,59 @@ class OutputFormatter:
         if not rows:
             return "(no data)"
 
-        table = Table(show_lines=False)
-        for column in columns:
-            table.add_column(column)
+        display_columns: list[str] = []
+        for col in columns:
+            sample = next(
+                (row.get(col) for row in rows if row.get(col) is not None),
+                None,
+            )
+            if isinstance(sample, (dict, list)):
+                continue
+            display_columns.append(col)
+
+        if not display_columns:
+            display_columns = columns
+
+        display_columns = [
+            col for col in display_columns
+            if any(
+                row.get(col) is not None and row.get(col) != ""
+                for row in rows
+            )
+        ]
+
+        if not display_columns:
+            display_columns = columns
+
+        table = Table(
+            box=SIMPLE_HEAD,
+            pad_edge=False,
+            show_edge=False,
+            row_styles=["", "dim"],
+        )
+        for column in display_columns:
+            is_numeric = all(
+                isinstance(row.get(column), (int, float))
+                for row in rows
+                if row.get(column) is not None and row.get(column) != ""
+            )
+            table.add_column(
+                column,
+                justify="right" if is_numeric else "left",
+                no_wrap=True,
+            )
 
         for row in rows:
-            table.add_row(*[self._stringify(row.get(column)) for column in columns])
+            table.add_row(
+                *[self._stringify(row.get(column)) for column in display_columns]
+            )
 
-        console = Console(record=True, no_color=self.no_color, force_terminal=False)
+        console = Console(
+            record=True,
+            no_color=self.no_color,
+            force_terminal=False,
+            file=io.StringIO(),
+        )
         console.print(table)
         return console.export_text().rstrip()
 
@@ -174,24 +220,33 @@ class OutputFormatter:
 
     def _coerce_rows(self, data: JSONValue) -> tuple[list[dict[str, JSONValue]], list[str]]:
         if isinstance(data, dict):
+            items_val = data.get("items")
+            if isinstance(items_val, list) and items_val and isinstance(items_val[0], dict):
+                dict_rows = [
+                    {str(k): cast(JSONValue, v) for k, v in item.items()}
+                    for item in items_val
+                    if isinstance(item, dict)
+                ]
+                columns = self._ordered_union(dict_rows)
+                return dict_rows, columns
+
             row = {str(key): cast(JSONValue, value) for key, value in data.items()}
             return [row], list(row.keys())
-    
+
         if isinstance(data, list):
             if not data:
                 return [], []
-    
-            # Single pass: type-safe and avoids all()+second pass
+
             dict_rows: list[dict[str, JSONValue]] = []
             for item in data:
                 if not isinstance(item, dict):
                     rows = [{"value": value} for value in data]
                     return rows, ["value"]
                 dict_rows.append({str(k): cast(JSONValue, v) for k, v in item.items()})
-    
+
             columns = self._ordered_union(dict_rows)
             return dict_rows, columns
-    
+
         return [{"value": data}], ["value"]
 
     def _ordered_union(self, rows: list[dict[str, JSONValue]]) -> list[str]:

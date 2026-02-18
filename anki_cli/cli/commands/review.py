@@ -399,6 +399,40 @@ def review_answer_cmd(ctx: click.Context, card_id: int, rating: str) -> None:
 
     formatter.emit_success(command="review:answer", data=result)
 
+@click.command("review:start")
+@click.option("--deck", default=None, help="Optional deck filter")
+@click.pass_context
+def review_start_cmd(ctx: click.Context, deck: str | None) -> None:
+    obj: dict[str, Any] = ctx.obj or {}
+    formatter = formatter_from_ctx(ctx)
+
+    try:
+        from anki_cli.tui.review_app import ReviewApp
+    except Exception as exc:
+        formatter.emit_error(
+            command="review:start",
+            code="TUI_NOT_AVAILABLE",
+            message=f"Textual is not installed/available: {exc}",
+            details={"hint": "Run: uv sync --extra tui"},
+        )
+        raise click.exceptions.Exit(2) from exc
+
+    try:
+        with backend_session_from_context(obj) as backend:
+            if getattr(backend, "name", "") != "direct":
+                formatter.emit_error(
+                    command="review:start",
+                    code="UNSUPPORTED_BACKEND",
+                    message="review:start currently supports only direct backend.",
+                    details={"backend": getattr(backend, "name", "unknown")},
+                )
+                raise click.exceptions.Exit(2)
+
+            app = ReviewApp(backend=backend, deck=deck.strip() if deck else None)
+            app.run()
+    except (BackendNotImplementedError, BackendFactoryError, NotImplementedError) as exc:
+        _emit_backend_unavailable(ctx=ctx, command="review:start", obj=obj, error=exc)
+
 
 register_command("review", review_cmd)
 register_command("review:next", review_next_cmd)
@@ -406,3 +440,4 @@ register_command("review:show", review_show_cmd)
 register_command("review:answer", review_answer_cmd)
 register_command("review:preview", review_preview_cmd)
 register_command("review:undo", review_undo_cmd)
+register_command("review:start", review_start_cmd)
