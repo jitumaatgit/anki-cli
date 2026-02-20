@@ -48,6 +48,7 @@ def _default_templates(kind: str) -> tuple[str, str, str]:
 @click.command("notetypes")
 @click.pass_context
 def notetypes_cmd(ctx: click.Context) -> None:
+    """List all note types."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -73,6 +74,7 @@ def notetypes_cmd(ctx: click.Context) -> None:
 )
 @click.pass_context
 def notetype_cmd(ctx: click.Context, notetype_name: str) -> None:
+    """Show details for a note type."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -127,6 +129,7 @@ def notetype_create_cmd(
     back_tmpl: str | None,
     css: str,
 ) -> None:
+    """Create a new note type with fields and templates."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized_name = notetype_name.strip()
@@ -177,6 +180,7 @@ def notetype_create_cmd(
 @click.option("--field", "field_name", required=True, help="Field name")
 @click.pass_context
 def notetype_field_add_cmd(ctx: click.Context, notetype_name: str, field_name: str) -> None:
+    """Add a field to a note type."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized_name = notetype_name.strip()
@@ -212,6 +216,7 @@ def notetype_field_add_cmd(ctx: click.Context, notetype_name: str, field_name: s
 @click.option("--field", "field_name", required=True, help="Field name")
 @click.pass_context
 def notetype_field_remove_cmd(ctx: click.Context, notetype_name: str, field_name: str) -> None:
+    """Remove a field from a note type."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized_name = notetype_name.strip()
@@ -255,6 +260,7 @@ def notetype_template_add_cmd(
     front_tmpl: str,
     back_tmpl: str,
 ) -> None:
+    """Add a card template to a note type."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized_name = notetype_name.strip()
@@ -303,6 +309,7 @@ def notetype_template_edit_cmd(
     front_tmpl: str | None,
     back_tmpl: str | None,
 ) -> None:
+    """Edit front/back of a card template."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized_name = notetype_name.strip()
@@ -354,6 +361,7 @@ def notetype_css_cmd(
     notetype_name: str,
     css_value: str | None,
 ) -> None:
+    """Get or set CSS styling for a note type."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized_name = notetype_name.strip()

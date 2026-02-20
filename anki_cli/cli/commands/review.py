@@ -176,6 +176,7 @@ def _render_card(
 @click.option("--deck", default=None, help="Optional deck filter")
 @click.pass_context
 def review_cmd(ctx: click.Context, deck: str | None) -> None:
+    """Show due counts for review."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -195,6 +196,7 @@ def review_cmd(ctx: click.Context, deck: str | None) -> None:
 @click.option("--deck", default=None, help="Optional deck filter")
 @click.pass_context
 def review_next_cmd(ctx: click.Context, deck: str | None) -> None:
+    """Fetch the next due card (question only)."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -249,6 +251,7 @@ def review_next_cmd(ctx: click.Context, deck: str | None) -> None:
 @click.option("--deck", default=None, help="Optional deck filter")
 @click.pass_context
 def review_show_cmd(ctx: click.Context, deck: str | None) -> None:
+    """Show the next card with its answer."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -288,6 +291,7 @@ def review_show_cmd(ctx: click.Context, deck: str | None) -> None:
 @click.option("--id", "card_id", required=True, type=int, help="Card ID")
 @click.pass_context
 def review_preview_cmd(ctx: click.Context, card_id: int) -> None:
+    """Preview scheduling outcome per rating."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -314,6 +318,7 @@ def review_preview_cmd(ctx: click.Context, card_id: int) -> None:
 @click.command("review:undo")
 @click.pass_context
 def review_undo_cmd(ctx: click.Context) -> None:
+    """Undo the last review answer."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -354,6 +359,7 @@ def review_undo_cmd(ctx: click.Context) -> None:
 @click.option("--rating", required=True, help="Rating: again|hard|good|easy or 1..4")
 @click.pass_context
 def review_answer_cmd(ctx: click.Context, card_id: int, rating: str) -> None:
+    """Answer a card (again/hard/good/easy)."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -403,6 +409,7 @@ def review_answer_cmd(ctx: click.Context, card_id: int, rating: str) -> None:
 @click.option("--deck", default=None, help="Optional deck filter")
 @click.pass_context
 def review_start_cmd(ctx: click.Context, deck: str | None) -> None:
+    """Start an interactive review session (TUI)."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 

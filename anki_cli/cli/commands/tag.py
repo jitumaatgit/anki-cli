@@ -50,6 +50,7 @@ def _normalize_tag_list(raw: str) -> list[str]:
 @click.command("tags")
 @click.pass_context
 def tags_cmd(ctx: click.Context) -> None:
+    """List all tags with counts."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -80,6 +81,7 @@ def tags_cmd(ctx: click.Context) -> None:
 @click.option("--tag", "tag_name", required=True, help="Tag name")
 @click.pass_context
 def tag_cmd(ctx: click.Context, tag_name: str) -> None:
+    """Show notes associated with a tag."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -107,6 +109,7 @@ def tag_add_cmd(
     query: str | None,
     tag_name: str,
 ) -> None:
+    """Add a tag to notes by ID or query."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -155,6 +158,7 @@ def tag_remove_cmd(
     query: str | None,
     tag_name: str,
 ) -> None:
+    """Remove a tag from notes by ID or query."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -197,6 +201,7 @@ def tag_remove_cmd(
 @click.option("--to", "new_tag", required=True, help="New tag")
 @click.pass_context
 def tag_rename_cmd(ctx: click.Context, old_tag: str, new_tag: str) -> None:
+    """Rename a tag across all notes."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 

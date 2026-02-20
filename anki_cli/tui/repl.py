@@ -4,7 +4,6 @@ import os
 import re
 import shlex
 import subprocess
-import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
@@ -13,14 +12,15 @@ import click
 from markdownify import markdownify
 from prompt_toolkit import PromptSession
 from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
-from prompt_toolkit.completion import Completer, Completion, FuzzyCompleter
-from prompt_toolkit.formatted_text import HTML
+from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.shortcuts import CompleteStyle
 from prompt_toolkit.styles import Style
-from rich.console import Console
+from rich import box
+from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.rule import Rule
+from rich.progress_bar import ProgressBar
 from rich.table import Table
 from rich.text import Text
 
@@ -29,14 +29,13 @@ from anki_cli.cli.params import preprocess_argv
 
 from .colors import (
     BLUE,
+    BORDER,
     CYAN,
     DIM,
     GREEN,
-    MENU_BG,
     RED,
-    SELECTION_BG,
     TEXT,
-    TOOLBAR_BG,
+    YELLOW,
 )
 
 console = Console()
@@ -101,7 +100,6 @@ def _history_path() -> Path:
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / "repl_history"
 
-
 class _AnkiCompleter(Completer):
 
     def __init__(self) -> None:
@@ -158,25 +156,28 @@ class _AnkiCompleter(Completer):
                     yield Completion(
                         c,
                         start_position=-len(word),
+                        display=f" {c:<22}",
                         display_meta=meta,
                     )
         else:
             cmd_name = words[0]
             for opt in self._options_for(cmd_name):
                 if opt.startswith(word):
-                    yield Completion(opt, start_position=-len(word))
+                    yield Completion(
+                        opt,
+                        start_position=-len(word),
+                        display=f" {opt:<22}",
+                    )
 
 
 _STYLE = Style.from_dict({
     "prompt.arrow": f"{CYAN} bold",
-    "bottom-toolbar": f"bg:{TOOLBAR_BG} {TEXT}",
-    "bottom-toolbar.text": "",
-    "completion-menu.completion": f"bg:{MENU_BG} {TEXT}",
-    "completion-menu.completion.current": f"bg:{SELECTION_BG} {TEXT} bold",
-    "completion-menu.meta.completion": f"bg:{MENU_BG} {DIM}",
-    "completion-menu.meta.completion.current": f"bg:{SELECTION_BG} {TEXT}",
-    "scrollbar.background": f"bg:{TOOLBAR_BG}",
-    "scrollbar.button": f"bg:{DIM}",
+    "completion-menu.completion": f"bg:default {DIM}",
+    "completion-menu.completion.current": f"noinherit bg:default {CYAN} bold",
+    "completion-menu.meta.completion": f"bg:default {DIM}",
+    "completion-menu.meta.completion.current": f"noinherit bg:default {TEXT}",
+    "scrollbar.background": "bg:default",
+    "scrollbar.button": "bg:default",
 })
 
 
@@ -281,19 +282,49 @@ def _grouped_help() -> None:
     console.print()
 
 
-def _fetch_due_counts(ctx_obj: dict[str, Any], deck: str | None) -> str:
+def _fetch_due_counts(
+    ctx_obj: dict[str, Any], deck: str | None,
+) -> dict[str, int]:
     try:
         from anki_cli.backends.factory import backend_session_from_context
         with backend_session_from_context(ctx_obj) as backend:
             counts = backend.get_due_counts(
                 deck=deck.strip() if deck else None
             )
-            new = counts.get("new", 0)
-            learn = counts.get("learn", 0)
-            review = counts.get("review", 0)
-            return f"new={new} learn={learn} review={review}"
+            return {
+                "new": counts.get("new", 0),
+                "learn": counts.get("learn", 0),
+                "review": counts.get("review", 0),
+            }
     except Exception:
+        return {}
+
+
+def _due_counts_inline(counts: dict[str, int]) -> str:
+    if not counts:
         return ""
+    return (
+        f"new={counts.get('new', 0)} "
+        f"learn={counts.get('learn', 0)} "
+        f"review={counts.get('review', 0)}"
+    )
+
+def _render_review_progress(reviewed: int, total: int, deck: str | None) -> Table:
+    bar = ProgressBar(
+        total=total, completed=reviewed,
+        complete_style=BLUE, finished_style=GREEN,
+    )
+
+    layout = Table.grid(padding=(0, 1), expand=True)
+    layout.add_column("Label", width=10)
+    layout.add_column("Bar", ratio=1)
+    layout.add_column("Count", width=8, justify="right")
+
+    label = Text("Review", style=f"bold {CYAN}")
+    count = Text(f"{reviewed}/{total}", style=DIM)
+
+    layout.add_row(label, bar, count)
+    return layout
 
 
 def _inline_review(ctx_obj: dict[str, Any], deck: str | None) -> None:
@@ -304,11 +335,21 @@ def _inline_review(ctx_obj: dict[str, Any], deck: str | None) -> None:
         backend_ctx = backend_session_from_context(ctx_obj)
         backend = backend_ctx.__enter__()
     except Exception as exc:
-        console.print(f"[#f7768e]Error:[/] {exc}")
+        console.print(f"[{RED}]Error:[/] {exc}")
         return
 
     undo = UndoStore()
     reviewed = 0
+
+    try:
+        counts = backend.get_due_counts(deck=deck.strip() if deck else None)
+        total_due = (
+            counts.get("new", 0)
+            + counts.get("learn", 0)
+            + counts.get("review", 0)
+        )
+    except Exception:
+        total_due = 0
 
     try:
         while True:
@@ -336,10 +377,17 @@ def _inline_review(ctx_obj: dict[str, Any], deck: str | None) -> None:
                 )
 
             if card_id is None:
-                console.print(
-                    f"\n  [{DIM}]No more due cards.[/]"
-                    f"  [{DIM}]deck={deck or '(all)'}  reviewed={reviewed}[/]\n"
-                )
+                summary = Text()
+                summary.append("Session complete\n\n", style=f"bold {GREEN}")
+                summary.append(f"Reviewed {reviewed} cards", style=TEXT)
+                if deck:
+                    summary.append(f"  ({deck})", style=DIM)
+                console.print()
+                console.print(Panel(
+                    summary, border_style=GREEN,
+                    title=f"[bold {GREEN}]Done[/]",
+                    padding=(1, 2),
+                ))
                 break
 
             rendered = _render_card_inline(backend, card_id)
@@ -350,6 +398,8 @@ def _inline_review(ctx_obj: dict[str, Any], deck: str | None) -> None:
             question, answer = rendered
 
             console.print()
+            if total_due > 0:
+                console.print(_render_review_progress(reviewed, total_due, deck))
             console.print(Panel(
                 Markdown(question),
                 title=f"[bold {CYAN}]Question[/] [{DIM}]({kind} card={card_id})[/]",
@@ -547,6 +597,78 @@ def _render_card_inline(
     return _strip_html(question), _strip_html(answer)
 
 
+def _render_header(
+    backend: str,
+    fmt: str,
+    due_counts: dict[str, int],
+    deck_context: str | None,
+) -> Panel:
+    logo_text = Text(_LOGO.strip("\n"))
+    logo_text.stylize(f"bold {BLUE}")
+
+    left_parts: list[Any] = [logo_text, ""]
+    meta_line = Text()
+    meta_line.append(f"{backend} backend", style=DIM)
+    meta_line.append("  ", style=DIM)
+    meta_line.append(f"format={fmt}", style=DIM)
+    if deck_context:
+        meta_line.append(f"  deck={deck_context}", style=DIM)
+    left_parts.append(meta_line)
+
+    left_group = Group(*left_parts)
+
+    right_parts: list[Any] = []
+
+    due_header = Text("Due cards", style=f"bold {YELLOW}")
+    right_parts.append(due_header)
+
+    due_table = Table(
+        show_header=False, box=None, padding=(0, 2), expand=False,
+    )
+    due_table.add_column("Label", style=DIM)
+    due_table.add_column("Count", style=TEXT, justify="right")
+
+    new = due_counts.get("new", 0)
+    learn = due_counts.get("learn", 0)
+    review = due_counts.get("review", 0)
+    due_table.add_row("New", str(new))
+    due_table.add_row("Learning", str(learn))
+    due_table.add_row("Review", str(review))
+    right_parts.append(due_table)
+
+    right_parts.append("")
+
+    hints_header = Text("Shortcuts", style=f"bold {YELLOW}")
+    right_parts.append(hints_header)
+
+    hints_table = Table(
+        show_header=False, box=None, padding=(0, 2), expand=False,
+    )
+    hints_table.add_column("Key", style=CYAN)
+    hints_table.add_column("Action", style=DIM)
+    hints_table.add_row("Tab", "autocomplete")
+    hints_table.add_row("Up/Down", "history")
+    hints_table.add_row("Ctrl+R", "search history")
+    hints_table.add_row("Ctrl+D", "quit")
+    right_parts.append(hints_table)
+
+    right_group = Group(*right_parts)
+
+    layout = Table.grid(padding=(0, 3), expand=False)
+    layout.add_column("Left")
+    layout.add_column("Right", vertical="middle")
+    layout.add_row(left_group, right_group)
+
+    return Panel(
+        layout,
+        title=f"[bold {BLUE}]anki-cli 0.1.0[/]",
+        border_style=BORDER,
+        box=box.ROUNDED,
+        padding=(1, 2),
+        expand=True,
+    )
+
+
 def run_repl(ctx_obj: dict[str, Any]) -> None:
     global _IN_REPL
     if _IN_REPL:
@@ -558,61 +680,33 @@ def run_repl(ctx_obj: dict[str, Any]) -> None:
         ctx_obj = dict(ctx_obj)
         ctx_obj["format"] = "table"
 
-        last_cmd_ms: float | None = None
         last_command: str | None = None
         deck_context: str | None = None
-        due_status: str = ""
+        due_counts: dict[str, int] = {}
 
         def _refresh_due() -> None:
-            nonlocal due_status
-            due_status = _fetch_due_counts(ctx_obj, deck_context)
+            nonlocal due_counts
+            due_counts = _fetch_due_counts(ctx_obj, deck_context)
 
         _refresh_due()
-
-        def _toolbar() -> HTML:
-            backend = ctx_obj.get("backend", "?")
-            fmt = ctx_obj.get("format", "table")
-            parts = [f"<b>{backend}</b>", f"format={fmt}"]
-            if deck_context:
-                parts.append(f"deck={deck_context}")
-            if due_status:
-                parts.append(due_status)
-            if last_cmd_ms is not None:
-                parts.append(f"{last_cmd_ms:.0f}ms")
-            return HTML("  ".join(parts))
 
         inner_completer = _AnkiCompleter()
 
         session: PromptSession[str] = PromptSession(
             history=FileHistory(str(_history_path())),
-            completer=FuzzyCompleter(inner_completer),
+            completer=inner_completer,
             style=_STYLE,
             complete_while_typing=True,
-            bottom_toolbar=_toolbar,
+            complete_style=CompleteStyle.COLUMN,
             auto_suggest=AutoSuggestFromHistory(),
         )
 
-        backend = ctx_obj.get("backend", "?")
-
-        header_table = Table.grid(padding=(0, 4))
-        header_table.add_column("Logo")
-        header_table.add_column("Title", vertical="middle")
-
-        logo_text = Text(_LOGO.strip("\n"))
-        logo_text.stylize(f"bold {BLUE}")
-
-        title_text = Text(f"anki-cli 0.1.0\n", style=f"bold {BLUE}")
-        title_text.append(f"{backend} backend", style=DIM)
-
-        header_table.add_row(logo_text, title_text)
+        backend = str(ctx_obj.get("backend", "?"))
+        fmt = str(ctx_obj.get("format", "table"))
 
         console.print()
-        console.print(header_table)
+        console.print(_render_header(backend, fmt, due_counts, deck_context))
         console.print()
-        console.print(f"  [bold {TEXT}]Interactive Shell[/]")
-        console.print(f"  [{DIM}]Tab to autocomplete, ↑/↓ for history, Ctrl+D to quit[/]")
-        console.print()
-        console.print(Rule(style=DIM))
 
         while True:
             try:
@@ -733,12 +827,10 @@ def run_repl(ctx_obj: dict[str, Any]) -> None:
                         parts.extend(["--deck", deck_context])
 
             last_command = stripped
-            t0 = time.monotonic()
-            
+
             with console.status(f"[{DIM}]Running...[/]", spinner="dots"):
                 _invoke_command(ctx_obj, parts)
-                
-            last_cmd_ms = (time.monotonic() - t0) * 1000
+
             _refresh_due()
 
     finally:

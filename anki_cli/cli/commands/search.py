@@ -34,6 +34,7 @@ def _emit_backend_unavailable(
 @click.option("--query", required=True, help="Anki search query")
 @click.pass_context
 def search_cmd(ctx: click.Context, query: str) -> None:
+    """Search cards with full details."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 

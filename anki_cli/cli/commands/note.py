@@ -79,6 +79,7 @@ def _parse_dynamic_fields(extra_args: list[str]) -> dict[str, str]:
 @click.option("--query", default="", help="Anki search query")
 @click.pass_context
 def notes_cmd(ctx: click.Context, query: str) -> None:
+    """List note IDs matching a query."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -100,6 +101,7 @@ def notes_cmd(ctx: click.Context, query: str) -> None:
 @click.option("--id", "note_id", required=True, type=int, help="Note ID")
 @click.pass_context
 def note_cmd(ctx: click.Context, note_id: int) -> None:
+    """Show detailed info for a single note."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -136,6 +138,7 @@ def note_add_cmd(
     tags: str,
     allow_duplicate: bool,
 ) -> None:
+    """Add a new note with custom fields."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -195,6 +198,7 @@ def note_add_cmd(
 @click.option("--tags", default=None, help="Replace tags with comma/space separated tags")
 @click.pass_context
 def note_edit_cmd(ctx: click.Context, note_id: int, tags: str | None) -> None:
+    """Edit fields or tags on an existing note."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -239,6 +243,7 @@ def note_edit_cmd(ctx: click.Context, note_id: int, tags: str | None) -> None:
 @click.option("--id", "note_id", required=True, type=int, help="Note ID")
 @click.pass_context
 def note_delete_cmd(ctx: click.Context, note_id: int) -> None:
+    """Delete a note (requires --yes)."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -279,6 +284,7 @@ def note_bulk_cmd(
     notetype: str,
     file_path: Path | None,
 ) -> None:
+    """Bulk-add notes from a JSON file or stdin."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -361,6 +367,7 @@ def note_bulk_cmd(
 @click.option("--fields", default="", help="Comma-separated field names")
 @click.pass_context
 def note_fields_cmd(ctx: click.Context, note_id: int, fields: str) -> None:
+    """Show field values for a note."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     selected: list[str] | None = None

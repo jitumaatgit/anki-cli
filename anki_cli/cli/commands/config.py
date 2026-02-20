@@ -14,6 +14,7 @@ from anki_cli.models.config import AppConfig
 @click.command("config")
 @click.pass_context
 def config_cmd(ctx: click.Context) -> None:
+    """Show current configuration."""
     obj: dict[str, Any] = ctx.obj or {}
     app_config = obj.get("app_config")
 
@@ -46,6 +47,7 @@ def config_cmd(ctx: click.Context) -> None:
 @click.command("config:path")
 @click.pass_context
 def config_path_cmd(ctx: click.Context) -> None:
+    """Show file paths used by anki-cli."""
     obj: dict[str, Any] = ctx.obj or {}
 
     col_path = obj.get("collection_path")
@@ -72,6 +74,7 @@ def config_path_cmd(ctx: click.Context) -> None:
 @click.option("--value", required=True, help="New value")
 @click.pass_context
 def config_set_cmd(ctx: click.Context, key: str, value: str) -> None:
+    """Set a config value by dotted key path."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 

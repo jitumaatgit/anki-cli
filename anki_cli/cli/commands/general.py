@@ -14,6 +14,7 @@ from anki_cli.cli.formatter import formatter_from_ctx
 @click.command("version")
 @click.pass_context
 def version_cmd(ctx: click.Context) -> None:
+    """Show version and environment info."""
     obj: dict[str, Any] = ctx.obj or {}
     backend = str(obj.get("backend", "none"))
     col = obj.get("collection_path")
@@ -33,6 +34,7 @@ def version_cmd(ctx: click.Context) -> None:
 @click.command("status")
 @click.pass_context
 def status_cmd(ctx: click.Context) -> None:
+    """Show current backend and collection status."""
     obj: dict[str, Any] = ctx.obj or {}
     col = obj.get("collection_path")
 
@@ -50,6 +52,7 @@ def status_cmd(ctx: click.Context) -> None:
 @click.command("init")
 @click.pass_context
 def init_cmd(ctx: click.Context) -> None:
+    """Initialize a new anki-cli collection."""
     obj: dict[str, Any] = ctx.obj or {}
     col = obj.get("collection_path")
 

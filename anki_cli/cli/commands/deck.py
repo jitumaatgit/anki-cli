@@ -59,6 +59,7 @@ def _parse_step_values(raw: str | None) -> list[float] | None:
 @click.command("decks")
 @click.pass_context
 def decks_cmd(ctx: click.Context) -> None:
+    """List all decks with due counts."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     table_mode = str(obj.get("format", "table")).lower() == "table"
@@ -107,6 +108,7 @@ def decks_cmd(ctx: click.Context) -> None:
 @click.option("--deck", "deck_name", required=True, help="Deck name")
 @click.pass_context
 def deck_cmd(ctx: click.Context, deck_name: str) -> None:
+    """Show details for a single deck."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized = deck_name.strip()
@@ -143,6 +145,7 @@ def deck_cmd(ctx: click.Context, deck_name: str) -> None:
 @click.option("--name", required=True, help="Deck name, e.g. Japanese::Vocab")
 @click.pass_context
 def deck_create_cmd(ctx: click.Context, name: str) -> None:
+    """Create a new deck (supports A::B hierarchy)."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -195,6 +198,7 @@ def deck_create_cmd(ctx: click.Context, name: str) -> None:
 @click.option("--to", "to_name", required=True, help="New deck name")
 @click.pass_context
 def deck_rename_cmd(ctx: click.Context, from_name: str, to_name: str) -> None:
+    """Rename an existing deck."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     source = from_name.strip()
@@ -247,6 +251,7 @@ def deck_rename_cmd(ctx: click.Context, from_name: str, to_name: str) -> None:
 @click.option("--deck", "deck_name", required=True, help="Deck name to delete")
 @click.pass_context
 def deck_delete_cmd(ctx: click.Context, deck_name: str) -> None:
+    """Delete a deck (requires --yes)."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -272,6 +277,7 @@ def deck_delete_cmd(ctx: click.Context, deck_name: str) -> None:
 @click.option("--deck", "deck_name", required=True, help="Deck name")
 @click.pass_context
 def deck_config_cmd(ctx: click.Context, deck_name: str) -> None:
+    """Show scheduler config for a deck."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized = deck_name.strip()
@@ -320,6 +326,7 @@ def deck_config_set_cmd(
     learn_steps: str | None,
     relearn_steps: str | None,
 ) -> None:
+    """Update scheduler settings for a deck."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     normalized = deck_name.strip()

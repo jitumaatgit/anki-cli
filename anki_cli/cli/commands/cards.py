@@ -43,6 +43,7 @@ def _collect_card_ids(*, backend: Any, card_id: int | None, query: str | None) -
 @click.option("--query", default="", help="Anki search query")
 @click.pass_context
 def cards_cmd(ctx: click.Context, query: str) -> None:
+    """List card IDs matching a query."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -98,6 +99,7 @@ def _pick_template(
 @click.option("--revlog-limit", default=10, type=int, show_default=True)
 @click.pass_context
 def card_cmd(ctx: click.Context, card_id: int, revlog_limit: int) -> None:
+    """Show detailed info for a single card."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -221,6 +223,7 @@ def card_cmd(ctx: click.Context, card_id: int, revlog_limit: int) -> None:
 @click.option("--query", default=None, help="Search query for target cards")
 @click.pass_context
 def card_suspend_cmd(ctx: click.Context, card_id: int | None, query: str | None) -> None:
+    """Suspend cards by ID or query."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -255,6 +258,7 @@ def card_suspend_cmd(ctx: click.Context, card_id: int | None, query: str | None)
 @click.option("--query", default=None, help="Search query for target cards")
 @click.pass_context
 def card_unsuspend_cmd(ctx: click.Context, card_id: int | None, query: str | None) -> None:
+    """Unsuspend cards by ID or query."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -289,6 +293,7 @@ def card_unsuspend_cmd(ctx: click.Context, card_id: int | None, query: str | Non
 @click.option("--limit", default=50, type=int, show_default=True, help="Max revlog rows (1..1000)")
 @click.pass_context
 def card_revlog_cmd(ctx: click.Context, card_id: int, limit: int) -> None:
+    """Show review history for a card."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
 
@@ -327,6 +332,7 @@ def card_revlog_cmd(ctx: click.Context, card_id: int, limit: int) -> None:
 def card_move_cmd(
     ctx: click.Context, card_id: int | None, query: str | None, deck_name: str
 ) -> None:
+    """Move cards to a different deck."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     if card_id is None and not query:
@@ -354,6 +360,7 @@ def card_move_cmd(
 @click.option("--flag", type=int, required=True, help="Flag value 0..7")
 @click.pass_context
 def card_flag_cmd(ctx: click.Context, card_id: int | None, query: str | None, flag: int) -> None:
+    """Set a flag (0-7) on cards."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     if card_id is None and not query:
@@ -380,6 +387,7 @@ def card_flag_cmd(ctx: click.Context, card_id: int | None, query: str | None, fl
 @click.option("--query", default=None, help="Search query for target cards")
 @click.pass_context
 def card_bury_cmd(ctx: click.Context, card_id: int | None, query: str | None) -> None:
+    """Bury cards until next session."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     if card_id is None and not query:
@@ -405,6 +413,7 @@ def card_bury_cmd(ctx: click.Context, card_id: int | None, query: str | None) ->
 @click.option("--deck", "deck_name", default=None, help="Optional deck scope")
 @click.pass_context
 def card_unbury_cmd(ctx: click.Context, deck_name: str | None) -> None:
+    """Unbury all cards in a deck."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     deck = deck_name.strip() if deck_name else None
@@ -431,6 +440,7 @@ def card_unbury_cmd(ctx: click.Context, deck_name: str | None) -> None:
 def card_reschedule_cmd(
     ctx: click.Context, card_id: int | None, query: str | None, days: int
 ) -> None:
+    """Reschedule cards to N days from today."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     if card_id is None and not query:
@@ -459,6 +469,7 @@ def card_reschedule_cmd(
 @click.option("--query", default=None, help="Search query for target cards")
 @click.pass_context
 def card_reset_cmd(ctx: click.Context, card_id: int | None, query: str | None) -> None:
+    """Reset cards to new (forget progress)."""
     obj: dict[str, Any] = ctx.obj or {}
     formatter = formatter_from_ctx(ctx)
     if card_id is None and not query:
