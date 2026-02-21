@@ -4,10 +4,10 @@ requires-python = ">=3.12, <3.14"
 
 [[package]]
 name = "anki-cli"
-version = "0.1.0"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
-    { name = "betterproto", extra = ["compiler"] },
+    { name = "betterproto" },
     { name = "click" },
     { name = "fsrs" },
     { name = "httpx" },
@@ -28,6 +28,7 @@ tui = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "betterproto", extra = ["compiler"] },
     { name = "black" },
     { name = "grpcio-tools" },
     { name = "jinja2" },
@@ -39,10 +40,10 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "betterproto", extras = ["compiler"], specifier = ">=2.0.0b7" },
+    { name = "betterproto", specifier = ">=2.0.0b7,<3" },
     { name = "click" },
     { name = "fsrs" },
-    { name = "httpx" },
+    { name = "httpx", specifier = ">=0.27,<1" },
     { name = "markdownify", specifier = ">=1.2.2" },
     { name = "prompt-toolkit", marker = "extra == 'tui'" },
     { name = "pydantic" },
@@ -55,6 +56,7 @@ provides-extras = ["tui", "clipboard"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "betterproto", extras = ["compiler"], specifier = ">=2.0.0b7" },
     { name = "black", specifier = ">=26.1.0" },
     { name = "grpcio-tools", specifier = ">=1.78.0" },
     { name = "jinja2", specifier = ">=3.1.6" },
