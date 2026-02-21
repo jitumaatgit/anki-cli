@@ -2,6 +2,10 @@
 
 Hybrid Anki CLI for humans and agents.
 
+<p align="center">
+  <img src="assets/anki-cli.png" alt="anki-cli interactive REPL showing due card counts, keyboard shortcuts, and command autocomplete" width="700">
+</p>
+
 `anki-cli` supports both:
 
 - AnkiConnect backend (use a running Anki Desktop instance)
@@ -196,6 +200,24 @@ Exit codes:
 - `2`: invalid input or confirmation required
 - `4`: entity not found
 - `7`: backend unavailable
+
+## AI Agent Integration
+
+This repo ships a `SKILL.md` at the project root that AI agents (Cursor, Windsurf, Cline, etc.) can consume to operate `anki-cli` without human guidance. It covers the full command reference, JSON output structure, search query syntax, error codes, and common workflows.
+
+To use it in Cursor, copy or symlink it into your skills directory:
+
+```bash
+# Personal skill (available across all projects)
+mkdir ~/.cursor/skills/anki-cli
+cp SKILL.md ~/.cursor/skills/anki-cli/SKILL.md
+
+# Or project-local skill (shared via the repo)
+mkdir .cursor/skills/anki-cli
+cp SKILL.md .cursor/skills/anki-cli/SKILL.md
+```
+
+For other AI coding agents, point them at `SKILL.md` in the repo root or include it in your agent's context/system prompt.
 
 ## Safety Notes
 
