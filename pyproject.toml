@@ -1,6 +1,6 @@
 [project]
 name = "anki-cli"
-version = "0.1.0"
+version = "0.1.2"
 description = "Hybrid Anki CLI for humans and agents"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -24,8 +24,8 @@ dependencies = [
   "rich",
   "pydantic",
   "fsrs",
-  "httpx",
-  "betterproto[compiler]>=2.0.0b7",
+  "httpx>=0.27,<1",
+  "betterproto>=2.0.0b7,<3",
   "pyperclip>=1.11.0",
   "markdownify>=1.2.2",
 ]
@@ -42,6 +42,7 @@ dev = [
   "pytest-cov",
   "ruff",
   "ty",
+  "betterproto[compiler]>=2.0.0b7",
 ]
 
 [project.scripts]

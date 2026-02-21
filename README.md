@@ -7,7 +7,7 @@ Hybrid Anki CLI for humans and agents.
 - AnkiConnect backend (use a running Anki Desktop instance)
 - Direct SQLite backend (operate directly on collection files)
 
-Current release: `0.1.0` (alpha).
+Current release: `0.1.2` (alpha).
 
 ## Install
 
