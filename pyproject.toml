@@ -2,7 +2,23 @@
 name = "anki-cli"
 version = "0.1.0"
 description = "Hybrid Anki CLI for humans and agents"
+readme = "README.md"
 requires-python = ">=3.12,<3.14"
+license = { file = "LICENSE" }
+authors = [{ name = "umangkaushik" }]
+keywords = ["anki", "cli", "flashcards", "spaced-repetition", "education"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Education",
+  "Topic :: Utilities",
+]
 dependencies = [
   "click",
   "rich",
@@ -13,7 +29,6 @@ dependencies = [
   "pyperclip>=1.11.0",
   "markdownify>=1.2.2",
 ]
-
 [project.optional-dependencies]
 tui = ["textual", "prompt-toolkit"]
 clipboard = ["pyperclip"]
@@ -31,6 +46,11 @@ dev = [
 
 [project.scripts]
 anki = "anki_cli.cli.app:main"
+
+[project.urls]
+Homepage = "https://github.com/ubermenchh/anki-cli"
+Repository = "https://github.com/ubermenchh/anki-cli"
+Issues = "https://github.com/ubermenchh/anki-cli/issues"
 
 [build-system]
 requires = ["hatchling"]
@@ -52,3 +72,13 @@ python-version = "3.13"
 
 [tool.ty.src]
 exclude = ["anki_cli/proto/**"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not tui'"
+markers = [
+  "unit: fast unit tests",
+  "integration: integration tests",
+  "tui: tests requiring optional TUI dependencies",
+  "slow: long-running tests",
+]
