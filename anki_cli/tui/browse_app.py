@@ -149,12 +149,12 @@ def _format_card_detail(card: Mapping[str, Any]) -> Text:
     _row("Lapses:", str(lapses_val), RED if lapses_int > 3 else TEXT)
     _row("Flags:", str(card.get("flags", "")))
 
-    fields = card.get("fields")
-    if isinstance(fields, (list, tuple)):
+    values = _extract_field_values(card)
+    if values:
         t.append("\n")
         t.append("--- Fields ---\n", style=f"bold {YELLOW}")
-        for i, f in enumerate(fields):
-            text = _strip_html_basic(str(f))
+        for i, value in enumerate(values):
+            text = _strip_html_basic(value)
             t.append(f"  [{i}] ", style=DIM)
             t.append(f"{text}\n", style=TEXT)
 
@@ -225,14 +225,39 @@ def _format_interval_short(card: Mapping[str, Any]) -> str:
         return "-"
     return f"{ivl}d"
 
+def _extract_field_values(card: Mapping[str, Any]) -> list[str]:
+    fields = card.get("fields")
+
+    if isinstance(fields, (list, tuple)):
+        return [str(v) for v in fields]
+
+    if isinstance(fields, Mapping):
+        ordered: list[tuple[int, str]] = []
+        unordered: list[str] = []
+
+        for item in fields.values():
+            if isinstance(item, Mapping):
+                raw_value = item.get("value")
+                value = str(raw_value) if raw_value is not None else ""
+                order = item.get("order")
+                if isinstance(order, int):
+                    ordered.append((order, value))
+                else:
+                    unordered.append(str(value))
+            else:
+                unordered.append(str(item))
+
+        ordered.sort(key=lambda pair: pair[0])
+        return [value for _, value in ordered] + unordered
+        
+    return []
+
 
 def _extract_front_back(card: Mapping[str, Any]) -> tuple[str, str]:
-    fields = card.get("fields")
-    if isinstance(fields, (list, tuple)):
-        front = _strip_html_basic(str(fields[0])) if len(fields) > 0 else ""
-        back = _strip_html_basic(str(fields[1])) if len(fields) > 1 else ""
-        return front, back
-    return "", ""
+    values = _extract_field_values(card)
+    front = _strip_html_basic(values[0]) if len(values) > 0 else ""
+    back = _strip_html_basic(values[1]) if len(values) > 1 else ""
+    return front, back
 
 
 def _extract_note_id_from_card(card: Mapping[str, Any]) -> int | None:
@@ -246,7 +271,7 @@ def _extract_note_id_from_card(card: Mapping[str, Any]) -> int | None:
 def _format_browser_row(card: Mapping[str, Any]) -> tuple[Text | str, ...]:
     deck = Text(_truncate(str(card.get("deckName", "")), 16), style=CYAN)
 
-    notetype = _truncate(str(card.get("notetype_name", "") or "-"), 10)
+    notetype = _truncate(str(card.get("notetype_name") or card.get("modelName") or "-"), 10)
     notetype_lower = notetype.lower()
     if "cloze" in notetype_lower:
         type_style = PURPLE

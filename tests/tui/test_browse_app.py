@@ -111,7 +111,7 @@ def test_format_card_detail_no_tags_or_fields() -> None:
 
 
 def test_format_card_row_queue_has_color_style() -> None:
-    from anki_cli.tui.colors import GREEN, BLUE, RED
+    from anki_cli.tui.colors import BLUE, GREEN
     card = {"cardId": 1, "queue": 2, "lapses": 0}
     row = browse_mod._format_card_row(card)
     assert row[5].plain == "Review"
@@ -124,7 +124,7 @@ def test_format_card_row_queue_has_color_style() -> None:
 
 
 def test_format_card_row_high_lapses_highlighted() -> None:
-    from anki_cli.tui.colors import RED, DIM
+    from anki_cli.tui.colors import DIM, RED
     card_ok = {"cardId": 1, "lapses": 2}
     card_bad = {"cardId": 2, "lapses": 5}
     row_ok = browse_mod._format_card_row(card_ok)
@@ -142,3 +142,64 @@ def test_browse_app_constructor() -> None:
 def test_browse_app_constructor_default_query() -> None:
     app = browse_mod.BrowseApp(backend=object())
     assert app._query == ""
+
+def test_extract_field_values_ankiconnect_mapping_by_order() -> None:
+    card: dict[str, Any] = {
+        "fields": {
+            "Back": {"value": "A", "order": 1},
+            "Front": {"value": "<b>Q</b>", "order": 0},
+        }
+    }
+
+    assert browse_mod._extract_field_values(card) == ["<b>Q</b>", "A"]
+    assert browse_mod._extract_front_back(card) == ("Q", "A")
+
+
+def test_format_browser_row_uses_model_name_and_mapping_fields() -> None:
+    card: dict[str, Any] = {
+        "deckName": "Default",
+        "modelName": "Basic",
+        "fields": {
+            "Front": {"value": "<b>Hello</b> world", "order": 0},
+            "Back": {"value": "Back side", "order": 1},
+        },
+        "queue": 2,
+        "interval": 8,
+        "due_info": "",
+    }
+
+    row = browse_mod._format_browser_row(card)
+    assert row[0].plain == "Default"
+    assert row[1].plain == "Basic"
+    assert row[2].plain == "Hello world"
+
+
+def test_extract_field_values_mapping_without_order_uses_values() -> None:
+    card: dict[str, Any] = {
+        "fields": {
+            "Front": {"value": "Q"},
+            "Back": {"value": "A"},
+        }
+    }
+
+    assert browse_mod._extract_field_values(card) == ["Q", "A"]
+
+
+def test_extract_field_values_mapping_plain_values() -> None:
+    card: dict[str, Any] = {"fields": {"Front": "Q", "Back": "A"}}
+    assert browse_mod._extract_field_values(card) == ["Q", "A"]
+
+
+def test_format_card_detail_renders_mapping_fields() -> None:
+    card: dict[str, Any] = {
+        "cardId": 42,
+        "queue": 2,
+        "fields": {
+            "Front": {"value": "<b>Q</b>", "order": 0},
+            "Back": {"value": "A", "order": 1},
+        },
+    }
+
+    detail = browse_mod._format_card_detail(card)
+    assert "[0] Q" in detail
+    assert "[1] A" in detail
